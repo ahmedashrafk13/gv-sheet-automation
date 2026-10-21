@@ -36,9 +36,15 @@ check(
   'content_security_policy uses the MV3 object form (or the default)',
 );
 const hosts = manifest.host_permissions ?? [];
-// Google Voice, plus Google Sheets' CSV export (docs.google.com redirects to a
-// signed *.googleusercontent.com download link).
-const expectedHosts = ['https://voice.google.com/*', 'https://docs.google.com/*', 'https://*.googleusercontent.com/*'];
+// Google Voice, Google Sheets' CSV export (docs.google.com redirects to a
+// signed *.googleusercontent.com download link) and the optional AI providers.
+const AI_HOSTS = ['https://generativelanguage.googleapis.com', 'https://api.groq.com', 'https://openrouter.ai'];
+const expectedHosts = [
+  'https://voice.google.com/*',
+  'https://docs.google.com/*',
+  'https://*.googleusercontent.com/*',
+  ...AI_HOSTS.map((h) => `${h}/*`),
+];
 check(
   hosts.length === expectedHosts.length && expectedHosts.every((h) => hosts.includes(h)),
   `host access limited to ${expectedHosts.join(', ')}`,
@@ -95,9 +101,10 @@ for (const f of shipped) {
   if (/XMLHttpRequest|navigator\.sendBeacon|new WebSocket/.test(src)) {
     problems.push(`${f} makes network requests`);
   }
-  // The one allowed request: lib/sheets.js downloading a Google Sheet as CSV.
-  if (/fetch\s*\(|fetchImpl\s*\(/.test(src) && f !== 'lib/sheets.js') {
-    problems.push(`${f} makes network requests (only lib/sheets.js may)`);
+  // The allowed requests: lib/sheets.js downloading a Google Sheet as CSV, and
+  // lib/ai.js asking the user's chosen AI provider for message versions.
+  if (/fetch\s*\(|fetchImpl\s*\(/.test(src) && f !== 'lib/sheets.js' && f !== 'lib/ai.js') {
+    problems.push(`${f} makes network requests (only lib/sheets.js and lib/ai.js may)`);
   }
 }
 const sheetsSrc = read('lib/sheets.js');
@@ -106,7 +113,17 @@ check(
   sheetUrls.length > 0 && sheetUrls.every((u) => u === 'https://docs.google.com'),
   'lib/sheets.js only builds docs.google.com URLs',
 );
-check(!problems.some((p) => /eval|remote|network/.test(p)), 'no remote code or eval; only lib/sheets.js makes network requests');
+const aiSrc = read('lib/ai.js');
+// Every URL in lib/ai.js is an API host, except the "get a free key" links shown in Settings.
+const aiRequestUrls = aiSrc
+  .split('\n')
+  .filter((line) => !/^\s*keyUrl:|^\s*\/\//.test(line))
+  .flatMap((line) => [...line.matchAll(/https:\/\/[a-z0-9.-]+/gi)].map((m) => m[0]));
+check(
+  aiRequestUrls.length >= 2 && aiRequestUrls.every((u) => AI_HOSTS.includes(u)),
+  `lib/ai.js only sends requests to ${AI_HOSTS.join(', ')}`,
+);
+check(!problems.some((p) => /eval|remote|network/.test(p)), 'no remote code or eval; only lib/sheets.js and lib/ai.js make network requests');
 
 for (const ref of referenced) {
   if (!ref) continue;

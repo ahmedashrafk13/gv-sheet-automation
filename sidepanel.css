@@ -1782,3 +1782,72 @@ dialog p {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+/* AI message versions ----------------------------------------------------- */
+
+input[type="password"],
+input[type="text"],
+select {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 7px 10px;
+  font: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.ai-toggle {
+  margin-top: 10px;
+}
+
+.ai-toggle .check-label .icon {
+  color: var(--accent);
+}
+
+.ai-toggle .field-hint {
+  margin-top: 3px;
+}
+
+.ai-toggle .field-hint[data-tone="warning"] {
+  color: var(--warning);
+}
+
+.ai-fields {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 10px;
+}
+
+.ai-fields > label {
+  margin-top: 6px;
+  font-weight: 550;
+}
+
+.ai-fields a {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.ai-samples {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  white-space: pre-line;
+}
+
+.ai-samples[data-tone="danger"] {
+  padding-left: 0;
+  list-style: none;
+  color: var(--danger);
+}

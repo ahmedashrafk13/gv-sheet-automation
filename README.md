@@ -21,6 +21,7 @@ A Chrome extension (Manifest V3) that sends Google Voice text messages to a list
   - **Fallbacks.** `{{First Name|there}}` uses "there" when the cell is empty.
   - **From a full-name column.** A "Name" column gives you `{{First Name}}` and `{{Last Name}}` automatically.
   - **Blocked when empty.** A row whose variable is empty, with no fallback, is held back so nobody gets "Hi ,".
+- **Optional: a different AI-written version for each contact.** Turn it on, add a free API key (Google Gemini, Groq or OpenRouter), and every contact gets your message reworded differently with the same meaning. Each version must keep every `{{placeholder}}`, link, number, time, price and STOP wording, or it is thrown away. You read every version before anything is sent. See [AI message versions](#ai-message-versions-optional).
 - **Live preview.** You see the first finished message, a ready / to-fix count and clickable variable chips while you type. Each contact in the list expands to the exact text that will be sent.
 - **Never texts the same number twice.** Every number you text is remembered across queues and days (as a one-way fingerprint, not the number itself). When you import your sheet again, numbers texted before are skipped automatically, so a sheet that grows every day only sends to the new rows. See [Daily sheets and the sent history](#daily-sheets-and-the-sent-history).
 - **Spreadsheet-friendly import.**
@@ -136,6 +137,27 @@ How it works:
 - **Settings › Sent history** shows how many numbers are remembered. **Add numbers you texted before** lets you paste numbers sent before you started using this (one per line, or a copied column). **Clear history** forgets them all.
 - Duplicate rows *within* one import are handled separately, by **Skip / Keep**.
 
+### AI message versions (optional)
+
+Off unless you turn it on. When it's on, each contact gets your message in a different wording.
+
+1. Get a free API key. Any one of these works:
+   - **Google Gemini** (the default): [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Default model `gemini-2.5-flash`.
+   - **Groq**: [console.groq.com/keys](https://console.groq.com/keys). Default model `llama-3.1-8b-instant`.
+   - **OpenRouter**: [openrouter.ai/keys](https://openrouter.ai/keys). Default `openrouter/free`, which picks one of OpenRouter's free models.
+2. **Settings › AI message versions**: choose the service, paste the key and click **Test: write 3 versions**. It rewords your current message, or a sample.
+   Free model names change from time to time. If the default stops working, type another model name in **Model**.
+3. Under **Message**, tick **A different AI-written version for each contact**.
+4. Click **Validate & preview**. The button shows *Writing AI versions… 12 of 40* while the versions are written. Then open any contact to read its exact message; it's marked *AI-written version N*. **Start queue** sends exactly those texts.
+
+How it works:
+- **What is sent to the AI service.** Only the message itself, with its `{{placeholders}}` (for example `Hi {{First Name|there}}, …`). Phone numbers, names and other columns are never sent: they are filled into each version afterwards, on your computer.
+- **Checked before use.** A version is kept only if it has exactly the same placeholders (and fallbacks), the same links, numbers, dates, times and prices, and the same capitalised reply keywords such as STOP, and isn't much longer or shorter than the original. Anything else is discarded. Versions are checked again by the background worker.
+- **How many.** One version per contact that will be texted, up to 100 per message. Larger lists reuse the 100 in rotation (each still gets its own name). Contacts texted before, duplicates and opt-outs don't use up versions. Requests are spaced to stay inside the free tiers' per-minute limits, so 100 versions take about a minute with Gemini.
+- **Works with** *Same for everyone*, and with a message column when up to 10 different messages are shared by many rows. It also works when you add new rows to a running queue.
+- **If it fails**, for example a rejected key or a free quota used up for the day, the extension explains why and offers to import with your original message instead.
+- **The key** is stored only in this Chrome profile (`chrome.storage.local`). Free tiers may let the provider use what you send to improve its models, so keep private details out of the message text itself.
+
 ### 3. Send
 
 1. Optionally, open **Settings** and set the delay (45–3,600 s), the random extra delay (0–3,600 s), the daily limit (0–1,000 messages; 0 = no limit), the sending hours (default 8:00 AM–9:00 PM), the failure limit (1–10) and desktop notifications. Changes save by themselves. With the defaults, each gap is between 60 and 90 seconds.
@@ -180,12 +202,13 @@ How it works:
 | `sidePanel` | The interface. |
 | `storage` | Saves the queue, settings, activity log and sent history locally (`chrome.storage.local`). |
 | `alarms` | The delay between messages and the watchdog, which must survive the service worker stopping. |
+| Host: `https://generativelanguage.googleapis.com/*`, `https://api.groq.com/*`, `https://openrouter.ai/*` | Only for the optional AI message versions, and only for the service you choose. Nothing is sent to them unless the option is on and has a key. |
 | `notifications` | The desktop notification when a queue finishes or stops on a problem (can be turned off in Settings). |
 | `scripting` | Injects the content script into a Google Voice tab that was open before the extension was installed or reloaded. |
 | Host: `https://voice.google.com/*` | The only site the extension interacts with. |
 | Host: `https://docs.google.com/*`, `https://*.googleusercontent.com/*` | Downloads a linked Google Sheet as CSV. Google's export link redirects to a signed `googleusercontent.com` download. Nothing is sent to these hosts and no page there is read or changed. |
 
-- **No other network traffic.** The only requests the extension makes are downloading a sheet you linked (from `lib/sheets.js`, the one file allowed to make requests; `npm run check` enforces it) and Google Voice itself, in your own browser. There are no analytics or tracking, no remote code and no third-party scripts.
+- **No other network traffic.** The only requests the extension makes are downloading a sheet you linked (`lib/sheets.js`), asking your chosen AI service for message versions when that option is on (`lib/ai.js`), and Google Voice itself, in your own browser. These two files are the only ones allowed to make requests, each only to its own hosts; `npm run check` enforces it. There are no analytics or tracking, no remote code and no third-party scripts.
 - **Data is removed as soon as possible.** Message text is deleted from storage as soon as each message is sent. **Clear queue** removes all numbers, messages and the template (including the draft being written). The sent history and the do-not-text list keep only one-way fingerprints; **Settings › Sent history › Clear history** removes the texted numbers, and **Remove from list** takes numbers off the do-not-text list.
 - **The results file is made in the panel** and saved by your browser; nothing is uploaded.
 - **Your sheet stays private.** The sheet is downloaded with the Google sign-in already in this Chrome profile, so it doesn't need to be shared or published. Its rows are kept in the panel's memory only until you import them. Only the link is remembered.
@@ -214,6 +237,9 @@ How it works:
 | *The Google Voice tab wasn't responding, so it was reloaded* | Chrome had frozen or discarded the tab during a long wait. The queue tries again 20 seconds later; if the tab still doesn't respond, it stops so you can look. |
 | *Stopped after too many failures in a row* | Look at the activity log and the Google Voice tab before starting again. |
 | *Processing was interrupted (Chrome or the extension restarted)* | The queue was paused for review. Check any **Unconfirmed** contact, then Resume. |
+| *… didn't accept the API key* / *doesn't offer the model …* | Check the key in **Settings › AI message versions**, or clear the **Model** field to use the default. |
+| *… says the free limit is used up for now* | The AI service's free quota ran out. Wait, or import with the original message (offered automatically). |
+| *The AI didn't write any versions that kept your placeholders …* | The model kept changing things it must not change. Try again, or try another model or service. |
 | *{{X}} isn't a column in your sheet* | Fix the spelling, or include the header row when copying. The error lists the variables you can use. |
 | *{{X}} is empty for this row* | Fill in the cell, or add a fallback: `{{X|something}}`. |
 | Messages go out slowly | Keep the Google Voice tab in front; Chrome throttles background tabs. |
@@ -235,7 +261,7 @@ These need checking against the current live interface:
 ## Testing
 
 ```bash
-npm test          # 103 unit tests: parsing, variables, queue engine, recovery, validation, sending hours, opt-outs
+npm test          # 112 unit tests: parsing, variables, queue engine, recovery, validation, sending hours, opt-outs, AI versions
 npm run check     # manifest/MV3 rules, referenced files, syntax, no remote code, every button wired
 npm run e2e       # end-to-end run in Chromium against a mock Google Voice page (~6 min)
 ```
@@ -255,7 +281,8 @@ npm run e2e       # end-to-end run in Chromium against a mock Google Voice page 
 - no automatic retry of a failed or unconfirmed message;
 - state, the message being written and settings preserved when the panel is reopened;
 - adding new sheet rows to a started and a running queue;
-- a 1,500-character message sent in full, once.
+- a 1,500-character message sent in full, once;
+- AI versions (against a mocked Gemini API): the key in a header, no numbers or names in the request, a different wording per contact.
 
 **The mock reproduces this extension's assumptions about Google Voice, not Google Voice itself.** It proves the logic, not the selectors.
 
@@ -335,7 +362,9 @@ gv-sheet-automation/
 │   ├── parser.js          CSV/TSV parsing, phone validation, templates and variables
 │   ├── protocol.js        Message types, validation schemas, error catalogue
 │   ├── queue-model.js     Queue state model, counters, settings validation
-│   └── sheets.js          Google Sheet links and the CSV download (the only network code)
+│   ├── sheets.js          Google Sheet links and the CSV download
+│   ├── ai.js              Optional AI versions: Gemini / Groq / OpenRouter requests
+│   └── variations.js      Checking AI versions and handing them out to contacts
 ├── icons/                 16/32/48/128 px icons (generated by tools/make-icons.mjs)
 ├── tests/                 Unit tests, Chrome API mock, e2e harness and mock page
 └── tools/                 check.mjs (static checks), make-icons.mjs

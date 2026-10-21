@@ -9,6 +9,8 @@ import { PANEL, STEPS } from './lib/protocol.js';
 import { parseContacts, inspectColumns, MAX_SHEET_ROWS } from './lib/parser.js';
 import { HISTORY_KEY, restoreHistory, historyStats, lookupNumbers } from './lib/history.js';
 import { parseSheetLink, fetchSheetCsv } from './lib/sheets.js';
+import { AI_KEY, AI_PROVIDERS, normalizeAiConfig, modelFor, generateVersions } from './lib/ai.js';
+import { MAX_VERSIONS, MAX_SOURCES } from './lib/variations.js';
 import {
   STATUS,
   ITEM,
@@ -136,6 +138,18 @@ const ui = {
   btnOptOutRemove: $('btnOptOutRemove'),
   optOutNote: $('optOutNote'),
   confirmAlt: $('confirmAlt'),
+  aiToggle: $('aiToggle'),
+  aiToggleHint: $('aiToggleHint'),
+  aiState: $('aiState'),
+  aiProvider: $('aiProvider'),
+  aiKey: $('aiKey'),
+  btnAiKeyShow: $('btnAiKeyShow'),
+  aiKeyText: $('aiKeyText'),
+  aiKeyLink: $('aiKeyLink'),
+  aiModel: $('aiModel'),
+  btnAiTest: $('btnAiTest'),
+  aiNote: $('aiNote'),
+  aiSamples: $('aiSamples'),
   settingsSaved: $('settingsSaved'),
   btnDiagnose: $('btnDiagnose'),
   diagResult: $('diagResult'),
@@ -172,6 +186,12 @@ const SHEET_FRESH_MS = 2 * 60_000;
 const LIST_PAGE = 200; // contacts rendered at a time
 let listLimit = LIST_PAGE;
 let settingsTimer = null;
+let ai = normalizeAiConfig(null); // optional AI message versions: { enabled, provider, model, apiKey }
+let aiTimer = null;
+// Versions already written in this panel, per message, so validating twice doesn't use the free quota twice.
+const aiCache = new Map();
+const AI_CACHE_MS = 30 * 60_000;
+const AI_SAMPLE = 'Hi {{First Name|there}}, your appointment is confirmed for {{Appointment}}. Reply STOP to opt out.';
 const SMS_SEGMENT = 160;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 let source = 'file'; // 'sheet' | 'file' | 'paste'
@@ -453,7 +473,7 @@ function renderRun() {
   // While a queue runs, importing adds the sheet's new rows to it.
   ui.btnImport.disabled = busy;
   ui.btnImport.querySelector('span').textContent =
-    s.status === STATUS.RUNNING || s.status === STATUS.PAUSED || s.inFlight ? 'Add new contacts to the queue' : 'Validate & preview';
+    importProgress ?? (s.status === STATUS.RUNNING || s.status === STATUS.PAUSED || s.inFlight ? 'Add new contacts to the queue' : 'Validate & preview');
 }
 
 function matchesSearch(item) {
@@ -494,6 +514,7 @@ function contactNotes(item) {
   }
   if (item.status === ITEM.INVALID) notes.push(['danger', item.errors.join(' ')]);
   if (item.status === ITEM.OPTED_OUT) notes.push(['danger', 'On your do-not-text list (Settings). Never texted.']);
+  if (item.version && item.status !== ITEM.ACCEPTED) notes.push(['neutral', `AI-written version ${item.version} of your message.`]);
   if (item.status === ITEM.EXCLUDED) notes.push(['neutral', 'You skipped this contact. It won’t be texted unless you include it again.']);
   if (item.duplicateOf != null) {
     notes.push(['neutral', `Same number as row ${item.duplicateOf}${item.status === ITEM.SKIPPED ? ' — will be skipped.' : '.'}`]);
@@ -1216,6 +1237,7 @@ async function updatePreview() {
     texted && `${texted} texted before`,
     optedOut && `${optedOut} opted out`,
     invalid && `${invalid} to fix`,
+    ai.enabled && 'AI versions on',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -1254,8 +1276,146 @@ async function onVariableChip(label) {
 // ---------------------------------------------------------------------------
 // Actions
 
+// ---------------------------------------------------------------------------
+// AI message versions (optional)
+
+function renderAi() {
+  const p = AI_PROVIDERS[ai.provider];
+  ui.aiToggle.checked = ai.enabled;
+  ui.aiProvider.value = ai.provider;
+  if (document.activeElement !== ui.aiKey) ui.aiKey.value = ai.apiKey;
+  if (document.activeElement !== ui.aiModel) ui.aiModel.value = ai.model;
+  ui.aiModel.placeholder = p.model;
+  ui.aiKeyText.textContent = p.keyHint;
+  ui.aiKeyLink.href = p.keyUrl;
+  const [tag, tone] = !ai.apiKey ? ['No key', 'neutral'] : ai.enabled ? ['On', 'success'] : ['Ready', 'accent'];
+  ui.aiState.textContent = tag;
+  ui.aiState.dataset.tone = tone;
+  if (!ai.enabled) {
+    ui.aiToggleHint.textContent = 'Optional: rewords your message differently for every contact, keeping its meaning, placeholders, links and STOP wording.';
+    ui.aiToggleHint.dataset.tone = '';
+  } else if (!ai.apiKey) {
+    ui.aiToggleHint.textContent = 'Needs a free API key: add one in Settings › AI message versions.';
+    ui.aiToggleHint.dataset.tone = 'warning';
+  } else {
+    ui.aiToggleHint.textContent = `On, using ${p.label} (${modelFor(ai)}). Versions are written when you click Validate & preview, so you can read every one before sending.`;
+    ui.aiToggleHint.dataset.tone = '';
+  }
+}
+
+async function saveAi(changes) {
+  ai = normalizeAiConfig({ ...ai, ...changes });
+  renderAi();
+  try {
+    await chrome.storage.local.set({ [AI_KEY]: ai });
+  } catch {
+    showAlert('The AI settings couldn’t be saved.');
+  }
+}
+
+/** Write three versions of the current message (or a sample) to try the key and model. */
+async function testAi() {
+  ui.aiSamples.hidden = true;
+  if (!ai.apiKey) {
+    ui.aiNote.textContent = '';
+    ui.aiKey.focus();
+    ui.aiSamples.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Paste your API key first.' }));
+    ui.aiSamples.dataset.tone = 'danger';
+    ui.aiSamples.hidden = false;
+    return;
+  }
+  const label = ui.btnAiTest.querySelector('span');
+  label.textContent = 'Writing…';
+  const template = messageMode === 'template' && ui.templateText.value.trim() ? ui.templateText.value : AI_SAMPLE;
+  const res = await generateVersions(ai, template, 3);
+  label.textContent = 'Test: write 3 versions';
+  const items = res.ok ? res.versions : [res.error];
+  ui.aiSamples.dataset.tone = res.ok ? '' : 'danger';
+  ui.aiSamples.replaceChildren(...items.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+  ui.aiSamples.hidden = false;
+  ui.aiNote.textContent = res.ok ? `Works · ${AI_PROVIDERS[ai.provider].label}` : '';
+  if (res.ok) aiCache.set(cacheKey(template), { versions: res.versions, at: Date.now() });
+}
+
+const cacheKey = (source) => `${ai.provider}|${modelFor(ai)}|${source}`;
+
+let importProgress = null; // "Writing AI versions… 3 of 40" while versions are written
+
+function setImportLabel(text) {
+  importProgress = text;
+  ui.btnImport.querySelector('span').textContent = text;
+}
+
+/**
+ * With AI versions on, write a version for every contact that will be texted
+ * before the import is sent. Resolves {} (nothing to add), { versions }, or
+ * null when the import should not go ahead.
+ */
+async function withVersions(text, template, { append }) {
+  if (!ai.enabled) return {};
+  if (!ai.apiKey) {
+    showImportError('AI versions are on but there’s no API key. Add a free key in Settings › AI message versions, or untick the AI option.', ui.aiToggle);
+    return null;
+  }
+  const parsed = parseContacts(text, { template: template ?? null, maxContacts: MAX_SHEET_ROWS });
+  if (!parsed.ok) return {}; // the import itself reports what's wrong
+  const valid = parsed.rows.filter((r) => r.valid);
+  const known = await lookupNumbers(history, valid.map((r) => r.phone), fpCache);
+  const inQueue = append ? new Set((state?.items ?? []).map((i) => i.phone).filter(Boolean)) : new Set();
+  const need = new Map(); // message -> contacts that will get it
+  for (const r of valid) {
+    if (r.duplicateOf != null || known.has(r.phone) || inQueue.has(r.phone)) continue;
+    need.set(r.source, (need.get(r.source) ?? 0) + 1);
+  }
+  if (!need.size) return {};
+  if (need.size > MAX_SOURCES) {
+    showImportError(
+      `AI versions work when many contacts share a message (up to ${MAX_SOURCES} different messages). This sheet has ${need.size}, so its messages already differ: untick the AI option to import it.`,
+      ui.aiToggle,
+    );
+    return null;
+  }
+  const total = [...need.values()].reduce((sum, n) => sum + Math.min(n, MAX_VERSIONS), 0);
+  const versions = {};
+  const notes = [];
+  let done = 0;
+  for (const [source, n] of need) {
+    const count = Math.min(n, MAX_VERSIONS);
+    const cached = aiCache.get(cacheKey(source));
+    if (cached && Date.now() - cached.at < AI_CACHE_MS && cached.versions.length >= count) {
+      versions[source] = cached.versions.slice(0, count);
+      done += count;
+      continue;
+    }
+    setImportLabel(`Writing AI versions… ${done} of ${total}`);
+    const res = await generateVersions(ai, source, count, {
+      onProgress: (d) => setImportLabel(`Writing AI versions… ${Math.min(total, done + d)} of ${total}`),
+    });
+    if (!res.ok) {
+      const ok = await confirmAction({
+        title: 'Couldn’t write the AI versions',
+        body: `${res.error}\n\nImport with your original message for everyone instead?`,
+        confirmLabel: 'Use the original message',
+      });
+      return ok ? {} : null;
+    }
+    versions[source] = res.versions;
+    aiCache.set(cacheKey(source), { versions: res.versions, at: Date.now() });
+    if (res.error) notes.push(res.error);
+    done += count;
+  }
+  if ([...need.values()].some((n) => n > MAX_VERSIONS)) {
+    notes.push(`Up to ${MAX_VERSIONS} versions are written per message and used in rotation, so some contacts share a wording (still with their own name).`);
+  }
+  aiNotice = notes.join(' ');
+  return { versions };
+}
+
+let aiNotice = ''; // shown after the import when not every contact got a wording of its own
+
 async function importContacts() {
   hideImportError();
+  aiNotice = '';
   // A linked sheet is always imported as it is now, not as it was when the panel opened.
   if (source === 'sheet' && sheet.link && (sheet.text == null || Date.now() - (sheet.loadedAt ?? 0) > SHEET_FRESH_MS)) {
     if (!(await loadSheet())) return;
@@ -1291,8 +1451,13 @@ async function importContacts() {
       altDanger: true,
     });
     if (!choice) return;
-    res = await send(PANEL.QUEUE_IMPORT, { ...payload, ...(choice === 'alt' ? { replace: true } : { append: true }) });
+    const extra = await withVersions(text, template, { append: choice !== 'alt' });
+    if (!extra) return;
+    res = await send(PANEL.QUEUE_IMPORT, { ...payload, ...extra, ...(choice === 'alt' ? { replace: true } : { append: true }) });
   } else {
+    const extra = await withVersions(text, template, { append: false });
+    if (!extra) return;
+    Object.assign(payload, extra);
     res = await send(PANEL.QUEUE_IMPORT, payload);
     if (!res.ok && res.needsConfirm) {
       const ok = await confirmAction({
@@ -1319,13 +1484,19 @@ async function importContacts() {
       res.optedOut && `${res.optedOut} opted out`,
       res.invalid && `${res.invalid} need fixing in the sheet`,
     ].filter(Boolean);
-    showAlert(`${res.added ? `Added ${plural(res.added, 'new contact')} to the queue.` : 'No new contacts to add.'}${notes.length ? ` Skipped: ${notes.join(', ')}.` : ''}`, 'info');
+    showAlert(
+      `${res.added ? `Added ${plural(res.added, 'new contact')} to the queue.` : 'No new contacts to add.'}${notes.length ? ` Skipped: ${notes.join(', ')}.` : ''}${aiNotice ? ` ${aiNotice}` : ''}`,
+      'info',
+    );
     filter = 'pending';
     return;
   }
   finishImport();
   filter = res.summary.invalid > 0 ? 'issues' : res.summary.alreadyTexted > 0 ? 'pending' : 'all';
-  showAlert('');
+  showAlert(
+    res.summary.versioned ? `AI versions written for ${plural(res.summary.versioned, 'contact')}. Open a contact to read its exact message.${aiNotice ? ` ${aiNotice}` : ''}` : '',
+    'info',
+  );
   ui.contactsCard.scrollIntoView({ block: 'nearest' });
 }
 
@@ -1616,7 +1787,15 @@ function bindEvents() {
     await send(PANEL.GV_OPEN);
     setTimeout(refreshGv, 1500);
   });
-  ui.btnImport.addEventListener('click', () => command(importContacts));
+  ui.btnImport.addEventListener('click', () =>
+    command(async () => {
+      try {
+        await importContacts();
+      } finally {
+        importProgress = null;
+      }
+    }),
+  );
   ui.btnImportClear.addEventListener('click', () => {
     ui.importText.value = '';
     fileData = null;
@@ -1702,6 +1881,36 @@ function bindEvents() {
     renderContacts();
   });
   ui.btnExport.addEventListener('click', exportResults);
+
+  // AI message versions (optional)
+  ui.aiToggle.addEventListener('change', () => {
+    saveAi({ enabled: ui.aiToggle.checked });
+    updatePreview();
+  });
+  ui.aiProvider.addEventListener('change', () => {
+    ui.aiSamples.hidden = true;
+    ui.aiNote.textContent = '';
+    saveAi({ provider: ui.aiProvider.value, model: '' });
+  });
+  const saveAiFields = () => {
+    clearTimeout(aiTimer);
+    aiTimer = setTimeout(() => saveAi({ apiKey: ui.aiKey.value, model: ui.aiModel.value }), 400);
+  };
+  ui.aiKey.addEventListener('input', saveAiFields);
+  ui.aiModel.addEventListener('input', saveAiFields);
+  ui.btnAiKeyShow.addEventListener('click', () => {
+    const show = ui.aiKey.type === 'password';
+    ui.aiKey.type = show ? 'text' : 'password';
+    ui.btnAiKeyShow.textContent = show ? 'Hide' : 'Show';
+    ui.btnAiKeyShow.setAttribute('aria-pressed', String(show));
+  });
+  ui.btnAiTest.addEventListener('click', () =>
+    command(async () => {
+      clearTimeout(aiTimer);
+      await saveAi({ apiKey: ui.aiKey.value, model: ui.aiModel.value });
+      await testAi();
+    }),
+  );
   ui.dupControl.addEventListener('change', (e) => {
     if (e.target.name === 'dupPolicy') command(() => setDuplicatePolicy(e.target.value));
   });
@@ -1741,6 +1950,10 @@ function bindEvents() {
       setHistory(changes[HISTORY_KEY].newValue);
       schedulePreview();
     }
+    if (changes[AI_KEY]) {
+      ai = normalizeAiConfig(changes[AI_KEY].newValue);
+      renderAi();
+    }
   });
 
   document.addEventListener('visibilitychange', () => {
@@ -1758,9 +1971,10 @@ async function init() {
   if (res.ok) {
     state = res.state;
     settings = res.settings;
-    const stored = await chrome.storage.local.get([DAILY_KEY, HISTORY_KEY]);
+    const stored = await chrome.storage.local.get([DAILY_KEY, HISTORY_KEY, AI_KEY]);
     daily = stored[DAILY_KEY] ?? null;
     setHistory(stored[HISTORY_KEY]);
+    ai = normalizeAiConfig(stored[AI_KEY]);
   } else {
     showAlert(res.error);
   }
@@ -1809,6 +2023,7 @@ async function init() {
     /* storage unavailable */
   }
   renderSheetCard();
+  renderAi();
   applySource(savedSource);
   applyMode(mode);
 

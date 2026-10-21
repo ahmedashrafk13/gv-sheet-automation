@@ -17,6 +17,7 @@
 // are never retried automatically.
 
 import { parseContacts, extractPhones, MAX_CONTACTS, MAX_SHEET_ROWS } from './lib/parser.js';
+import { applyVersions, sanitizeVersions } from './lib/variations.js';
 import {
   HISTORY_KEY,
   createHistory,
@@ -784,6 +785,8 @@ async function handlePanel(msg) {
       const historyPolicy = msg.historyPolicy ?? 'skip';
       const texted = await lookupNumbers(history, parsed.rows.filter((r) => r.valid).map((r) => r.phone));
       const items = buildItems(parsed, policy, { texted, historyPolicy });
+      // Checked again here: only versions that keep the original's placeholders, links, numbers and STOP wording.
+      const versioned = applyVersions(items, parsed.rows, sanitizeVersions(msg.versions));
       const toSend = computeCounts(items).pending;
       if (toSend > MAX_CONTACTS) {
         return fail(`That's ${toSend.toLocaleString('en-US')} contacts to send. Import up to ${MAX_CONTACTS.toLocaleString('en-US')} at a time.`);
@@ -804,13 +807,15 @@ async function handlePanel(msg) {
         template, // kept with the queue so the panel can show it; removed by Clear queue
         alreadyTexted: new Set(items.filter((i) => i.textedAt != null).map((i) => i.phone)).size,
         optedOut: items.filter((i) => i.status === ITEM.OPTED_OUT).length,
+        versioned,
         importedAt: Date.now(),
       };
       const s = parsed.stats;
       const { alreadyTexted, optedOut } = state.importSummary;
       const textedNote =
         (alreadyTexted ? `, ${alreadyTexted} texted before${historyPolicy === 'skip' ? ' (skipped)' : ''}` : '') +
-        (optedOut ? `, ${optedOut} opted out` : '');
+        (optedOut ? `, ${optedOut} opted out` : '') +
+        (versioned ? `, AI versions for ${versioned}` : '');
       log(
         'info',
         `Imported ${s.dataRows} row${s.dataRows === 1 ? '' : 's'} (${parsed.delimiter}-separated, ${parsed.messageMode === 'template' ? 'same message for everyone' : 'message from the sheet'}): ${s.valid} valid, ${s.invalid} need fixing, ${s.duplicates} duplicate${textedNote}.`,
@@ -1101,7 +1106,9 @@ async function appendContacts(msg, template) {
   const texted = await lookupNumbers(history, parsed.rows.filter((r) => r.valid).map((r) => r.phone));
   const inQueue = new Set(state.items.map((i) => i.phone).filter(Boolean));
   const built = buildItems(parsed, state.duplicatePolicy, { texted, historyPolicy: 'skip' });
-  const added = built.filter((i) => i.status === ITEM.PENDING && !inQueue.has(i.phone));
+  const isNew = (i) => i.status === ITEM.PENDING && !inQueue.has(i.phone);
+  const versioned = applyVersions(built, parsed.rows, sanitizeVersions(msg.versions), isNew);
+  const added = built.filter(isNew);
   const report = {
     added: added.length,
     inQueue: built.filter((i) => i.phone && inQueue.has(i.phone)).length,
@@ -1123,6 +1130,7 @@ async function appendContacts(msg, template) {
     report.texted && `${report.texted} texted before`,
     report.optedOut && `${report.optedOut} opted out`,
     report.invalid && `${report.invalid} need fixing`,
+    versioned && `AI versions for ${versioned}`,
   ].filter(Boolean);
   log('info', `Added ${added.length} new contact${added.length === 1 ? '' : 's'} to the queue${notes.length ? ` (${notes.join(', ')})` : ''}.`);
   await persist();

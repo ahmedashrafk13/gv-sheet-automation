@@ -5,11 +5,20 @@
   "version": "1.0.0",
   "description": "Paste contacts from a spreadsheet, review them, and send Google Voice texts one at a time with a delay you control.",
   "minimum_chrome_version": "120",
-  "permissions": ["sidePanel", "storage", "alarms", "scripting", "notifications"],
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "alarms",
+    "scripting",
+    "notifications"
+  ],
   "host_permissions": [
     "https://voice.google.com/*",
     "https://docs.google.com/*",
-    "https://*.googleusercontent.com/*"
+    "https://*.googleusercontent.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.groq.com/*",
+    "https://openrouter.ai/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -34,8 +43,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://voice.google.com/*"],
-      "js": ["gv-selectors.js", "content.js"],
+      "matches": [
+        "https://voice.google.com/*"
+      ],
+      "js": [
+        "gv-selectors.js",
+        "content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }

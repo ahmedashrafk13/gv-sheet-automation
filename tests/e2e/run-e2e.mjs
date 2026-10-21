@@ -71,6 +71,24 @@ try {
     }),
   );
 
+  // Google's Gemini API, mocked: writes the number of versions asked for. Every
+  // request body is kept to check that no contact data is sent.
+  const aiRequests = [];
+  await context.route('https://generativelanguage.googleapis.com/**', (route) => {
+    const body = route.request().postData() || '';
+    aiRequests.push({ url: route.request().url(), headers: route.request().headers(), body });
+    const prompt = JSON.parse(body).contents[0].parts[0].text;
+    const n = Number(/Write (\d+) different versions/.exec(prompt)?.[1] ?? 3);
+    const message = /"""\n([\s\S]*?)\n"""/.exec(prompt)?.[1] ?? '';
+    const versions = Array.from({ length: n }, (_, i) => `Quick note ${i + 1}: ${message}`);
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ versions }) }] } }] }),
+    });
+  });
+
   let [sw] = context.serviceWorkers();
   if (!sw) sw = await context.waitForEvent('serviceworker');
   const extId = new URL(sw.url()).host;
@@ -345,6 +363,42 @@ try {
   check('long messages finish well inside the prepare window', Date.now() - t1 < 90_000, `${Math.round((Date.now() - t1) / 1000)} s`);
   await panel.click('#btnStop');
   await waitText('#runStateTag', /Stopped/);
+
+  // 17. Optional AI versions: a different wording for each contact ------------------------------------
+  await panel.click('[role="tab"][data-tab="settings"]');
+  check('AI versions are off until a key is added', (await text('#aiState')) === 'No key');
+  await panel.fill('#aiKey', 'AIza-e2e-test-key');
+  await panel.click('#btnAiTest');
+  await panel.waitForSelector('#aiSamples:not([hidden]) li', { timeout: 20_000 });
+  check('Test writes 3 versions with the key', (await panel.locator('#aiSamples li').count()) === 3, await text('#aiSamples'));
+  check('the key is sent in a header, not the URL', aiRequests[0]?.headers['x-goog-api-key'] === 'AIza-e2e-test-key' && !aiRequests[0].url.includes('AIza'));
+  await panel.click('[role="tab"][data-tab="send"]');
+  await panel.click('#importCard > summary').catch(() => {});
+  await panel.check('input[name="messageMode"][value="template"]');
+  await panel.check('#aiToggle');
+  check('turning AI versions on explains when they are written', /Validate & preview/.test(await text('#aiToggleHint')));
+  await panel.fill('#templateText', 'Hi {{First Name|there}}, see you in {{City}} tomorrow. Reply STOP to opt out.');
+  await panel.check('input[name="source"][value="paste"]');
+  await panel.fill('#importText', 'Phone,First Name,City\n(801) 555-0161,Robin,Provo\n(802) 555-0162,,Burlington\n(803) 555-0163,Casey,Columbia');
+  await waitText('#previewMeta', /AI versions on/);
+  const before = aiRequests.length;
+  await panel.click('#btnImport');
+  await panel.waitForSelector('#confirmDialog[open]');
+  await panel.click('#confirmAlt'); // Replace queue
+  await waitText('#runAlert', /AI versions written for 3 contacts/, 30_000);
+  check('importing writes an AI version for each new contact', true, await text('#runAlert'));
+  const sentToAi = aiRequests.slice(before).map((r) => r.body).join(' ');
+  check('the AI request holds the message with placeholders only — no numbers or names',
+    sentToAi.includes('{{First Name|there}}') && !/555|0161|Robin|Casey|Provo/.test(sentToAi));
+  await panel.click('.filter[data-filter="all"]');
+  const aiMessages = await panel.evaluate(async () => (await chrome.storage.local.get('gvsh.state'))['gvsh.state'].items.map((i) => i.message));
+  check('every contact has its own wording, with its own name filled in',
+    new Set(aiMessages).size === 3 && /^Quick note \d+: Hi Robin, see you in Provo/.test(aiMessages[0]) && /^Quick note \d+: Hi there, see you in Burlington/.test(aiMessages[1]),
+    aiMessages.join(' | '));
+  check('the contact list says which messages the AI wrote', /AI-written version/.test(await panel.textContent('#contactList')));
+  await shot(panel, '11-ai-versions');
+  await panel.click('#importCard > summary'); // the Import card closes after an import
+  await panel.uncheck('#aiToggle');
 
   await panel.emulateMedia({ colorScheme: 'dark' });
   await shot(panel, '07-dark');

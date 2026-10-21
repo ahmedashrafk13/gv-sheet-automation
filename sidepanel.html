@@ -29,6 +29,7 @@
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
       <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></symbol>
       <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
       <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></symbol>
     </defs>
@@ -194,6 +195,11 @@
               <label for="templateText" class="visually-hidden">Message to send</label>
               <textarea id="templateText" class="template-input" rows="4" maxlength="5000" aria-describedby="templateCount variableHint importError" placeholder="Hi {{First Name|there}}, your appointment is confirmed for {{Date}}. Reply STOP to opt out."></textarea>
               <p class="template-count" id="templateCount" aria-live="polite">0 characters</p>
+            </div>
+
+            <div class="ai-toggle">
+              <label class="check-label" for="aiToggle"><input type="checkbox" id="aiToggle" aria-describedby="aiToggleHint"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg>A different AI-written version for each contact</label>
+              <p class="field-hint" id="aiToggleHint"></p>
             </div>
 
             <div class="variables" id="variableBox">
@@ -363,6 +369,37 @@
           </div>
         </form>
         <p class="callout"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span>Delays lower the risk but can&rsquo;t guarantee you stay within Google Voice&rsquo;s limits. Google sets those and can change them.</span></p>
+      </section>
+
+      <section class="card" id="aiCard" aria-labelledby="aiTitle">
+        <div class="card-head">
+          <h2 id="aiTitle">AI message versions</h2>
+          <span class="state-tag" id="aiState" data-tone="neutral">Off</span>
+        </div>
+        <p class="field-hint">Optional. With &ldquo;A different AI-written version for each contact&rdquo; ticked under <strong>Message</strong>, every contact gets your message reworded a different way, with the same meaning. You review every version before anything is sent. Only the message text, with its <code>{{placeholders}}</code>, goes to the AI service &mdash; never phone numbers or names.</p>
+        <div class="ai-fields">
+          <label for="aiProvider">Service</label>
+          <select id="aiProvider">
+            <option value="gemini">Google Gemini (free tier)</option>
+            <option value="groq">Groq (free tier)</option>
+            <option value="openrouter">OpenRouter (free models)</option>
+          </select>
+          <label for="aiKey">API key</label>
+          <div class="inline-field">
+            <input type="password" id="aiKey" autocomplete="off" spellcheck="false" aria-describedby="aiKeyHint">
+            <button type="button" class="btn btn-sm" id="btnAiKeyShow" aria-pressed="false">Show</button>
+          </div>
+          <p class="field-hint ai-span" id="aiKeyHint"><span id="aiKeyText"></span> <a id="aiKeyLink" target="_blank" rel="noopener noreferrer">Get a free key</a></p>
+          <label for="aiModel">Model</label>
+          <input type="text" id="aiModel" autocomplete="off" spellcheck="false" aria-describedby="aiModelHint">
+          <p class="field-hint ai-span" id="aiModelHint">Leave empty to use the default shown.</p>
+        </div>
+        <div class="row-actions">
+          <button type="button" class="btn btn-sm" id="btnAiTest"><svg class="icon"><use href="#i-sparkle"/></svg><span>Test: write 3 versions</span></button>
+          <span class="save-note" id="aiNote" role="status" aria-live="polite"></span>
+        </div>
+        <ol class="ai-samples" id="aiSamples" aria-label="Test versions" hidden></ol>
+        <p class="callout"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span>The key is stored only in this Chrome profile. Free tiers have daily limits and may let the provider use what you send to improve its models, so keep private details out of the message text itself.</span></p>
       </section>
 
       <section class="card" id="historyCard" aria-labelledby="historyTitle">
