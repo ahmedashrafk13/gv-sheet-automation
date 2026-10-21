@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "GV Sheet Helper",
+  "short_name": "GV Sheet Helper",
+  "version": "1.0.0",
+  "description": "Paste contacts from a spreadsheet, review them, and send Google Voice texts one at a time with a delay you control.",
+  "minimum_chrome_version": "120",
+  "permissions": ["sidePanel", "storage", "alarms", "scripting", "notifications"],
+  "host_permissions": [
+    "https://voice.google.com/*",
+    "https://docs.google.com/*",
+    "https://*.googleusercontent.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open GV Sheet Helper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://voice.google.com/*"],
+      "js": ["gv-selectors.js", "content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+<!doctype html>
+<!--
+  Mock of the parts of Google Voice that content.js interacts with, used only
+  by tests/e2e/run-e2e.mjs (served at https://voice.google.com/ via request
+  interception). It mirrors the ASSUMPTIONS in gv-selectors.js, not the real
+  Google Voice DOM, so it tests the extension's logic, not the selectors.
+
+  Behaviour by the last four digits of the recipient:
+    0199  bubble shows "Not sent"            -> extension should report failed
+    0198  bubble stays "Sending..." forever  -> extension should report unknown
+    0197  number rejected in the picker      -> extension should not press Send
+    other bubble settles after 800 ms        -> extension should report accepted
+
+  window.__gv records every send, Send-button click and Enter keypress.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Voice (mock)</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+    gv-side-nav, gv-recipient-picker, gv-message-list, gv-text-message-item, gv-conversation-list { display: block; }
+    gv-side-nav { width: 160px; border-right: 1px solid #ddd; padding: 12px; }
+    gv-side-nav a { display: block; padding: 6px 0; }
+    main { flex: 1; display: flex; }
+    #list { width: 260px; border-right: 1px solid #ddd; padding: 12px; }
+    #composer { flex: 1; display: flex; flex-direction: column; padding: 12px; }
+    #composer[hidden] { display: none; }
+    .chip { display: inline-block; padding: 2px 8px; background: #e8eefc; border-radius: 12px; margin-right: 4px; }
+    [role="option"] { padding: 6px; cursor: pointer; border: 1px solid #ccc; margin-top: 4px; }
+    gv-message-list { flex: 1; overflow: auto; border: 1px solid #eee; margin: 8px 0; padding: 8px; }
+    gv-text-message-item { margin: 4px 0; padding: 6px 8px; background: #f1f3f4; border-radius: 8px; white-space: pre-wrap; }
+    .status { font-size: 11px; color: #666; }
+    .entry { display: flex; gap: 8px; }
+    textarea { flex: 1; }
+    .error { color: #b00; }
+  </style>
+</head>
+<body>
+  <gv-side-nav>
+    <nav>
+      <a href="/u/0/messages" aria-label="Messages">Messages</a>
+      <a href="/u/0/calls">Calls</a>
+    </nav>
+  </gv-side-nav>
+  <main role="main">
+    <section id="list">
+      <div role="button" tabindex="0" aria-label="Send new message" id="newMsg">+ Send new message</div>
+      <gv-conversation-list aria-label="Conversations"></gv-conversation-list>
+    </section>
+    <section id="composer" hidden>
+      <gv-recipient-picker>
+        <div class="chips"></div>
+        <input placeholder="Type a name or phone number" aria-label="To" autocomplete="off">
+        <div class="options" role="listbox"></div>
+      </gv-recipient-picker>
+      <gv-message-list role="list" aria-label="Message list"></gv-message-list>
+      <div class="entry">
+        <textarea aria-label="Type a message" placeholder="Type a message" rows="3"></textarea>
+        <button type="button" aria-label="Send message" disabled>Send</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const gv = (window.__gv = { sent: [], sendClicks: 0, enterPressed: 0, threads: {} });
+    const $ = (s) => document.querySelector(s);
+    const composer = $('#composer');
+    const chips = $('.chips');
+    const input = $('gv-recipient-picker input');
+    const options = $('.options');
+    const thread = $('gv-message-list');
+    const textarea = $('textarea');
+    const sendBtn = $('button[aria-label="Send message"]');
+    const convList = $('gv-conversation-list');
+    let recipient = null;
+    let optionTimer = null;
+
+    const fmt = (d) => `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+
+    function bubble(text, status) {
+      const item = document.createElement('gv-text-message-item');
+      const body = document.createElement('div');
+      body.className = 'content';
+      body.textContent = text;
+      item.append(body);
+      if (status) {
+        const s = document.createElement('div');
+        s.className = 'status';
+        s.textContent = status;
+        item.append(s);
+      }
+      return item;
+    }
+
+    function renderThread() {
+      thread.replaceChildren(...(gv.threads[recipient] || []).map((m) => bubble(m.text, m.status)));
+    }
+
+    $('#newMsg').addEventListener('click', () => {
+      history.pushState({}, '', '/u/0/messages');
+      composer.hidden = false;
+      recipient = null;
+      chips.replaceChildren();
+      options.replaceChildren();
+      input.value = '';
+      textarea.value = '';
+      sendBtn.disabled = true;
+      thread.replaceChildren();
+      input.focus();
+    });
+
+    input.addEventListener('input', () => {
+      clearTimeout(optionTimer);
+      options.replaceChildren();
+      const digits = input.value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+      if (digits.length < 10) return;
+      optionTimer = setTimeout(() => {
+        if (digits.endsWith('0197')) {
+          const err = document.createElement('div');
+          err.className = 'error';
+          err.setAttribute('role', 'alert');
+          err.textContent = 'Not a valid phone number';
+          options.append(err);
+          return;
+        }
+        const opt = document.createElement('div');
+        opt.setAttribute('role', 'option');
+        opt.id = 'send_to_button-0';
+        opt.textContent = `Send to ${fmt(digits)}`;
+        opt.addEventListener('click', () => {
+          recipient = digits;
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+          chip.setAttribute('role', 'row');
+          chip.textContent = fmt(digits);
+          chips.replaceChildren(chip);
+          options.replaceChildren();
+          input.value = '';
+          renderThread();
+        });
+        options.append(opt);
+      }, 300);
+    });
+
+    textarea.addEventListener('input', () => {
+      sendBtn.disabled = !textarea.value.trim() || !recipient;
+    });
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        gv.enterPressed++;
+        e.preventDefault();
+        doSend();
+      }
+    });
+    sendBtn.addEventListener('click', () => {
+      gv.sendClicks++;
+      doSend();
+    });
+
+    function doSend() {
+      const text = textarea.value;
+      if (!text.trim() || !recipient) return;
+      const to = recipient;
+      const msg = { text, status: 'Sending…' };
+      (gv.threads[to] ||= []).push(msg);
+      gv.sent.push({ to, text, at: Date.now() });
+      textarea.value = '';
+      sendBtn.disabled = true;
+      renderThread();
+      const preview = document.createElement('div');
+      preview.textContent = `${fmt(to)}: ${text}`;
+      convList.prepend(preview);
+      if (to.endsWith('0198')) return; // stuck on "Sending..."
+      setTimeout(() => {
+        msg.status = to.endsWith('0199') ? 'Not sent. Tap to retry.' : '';
+        if (recipient === to) renderThread();
+      }, 800);
+    }
+  </script>
+</body>
+</html>

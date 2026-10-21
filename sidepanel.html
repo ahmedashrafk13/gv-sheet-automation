@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GV Sheet Helper</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <script type="module" src="sidepanel.js"></script>
+</head>
+<body>
+  <!-- Icon set (Lucide-style strokes, inlined so nothing loads from the network) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></symbol>
+      <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></symbol>
+      <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a.8.8 0 0 0 1.2.7l12-7.5a.8.8 0 0 0 0-1.4l-12-7.5A.8.8 0 0 0 7 4.5z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="2"/></symbol>
+      <symbol id="i-retry" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+      <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="app-header">
+    <div class="header-row">
+      <div class="brand">
+        <img src="icons/icon48.png" width="22" height="22" alt="">
+        <h1>GV Sheet Helper</h1>
+      </div>
+      <button type="button" class="conn" id="connButton" data-state="checking" aria-describedby="connHint">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="connText">Checking&hellip;</span>
+      </button>
+      <span id="connHint" class="visually-hidden">Google Voice connection status. Activate to open Google Voice.</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections" id="tabBar">
+      <button type="button" class="tab" role="tab" data-tab="send" aria-controls="panelSend" aria-selected="true">
+        Send<span class="tab-dot" id="sendDot" aria-hidden="true" hidden></span>
+      </button>
+      <button type="button" class="tab" role="tab" data-tab="settings" aria-controls="panelSettings" aria-selected="false" tabindex="-1">Settings</button>
+      <button type="button" class="tab" role="tab" data-tab="activity" aria-controls="panelActivity" aria-selected="false" tabindex="-1">
+        Activity<span class="tab-count" id="activityCount" hidden></span>
+      </button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ================================================================= Send -->
+    <div class="tab-panel" id="panelSend" role="tabpanel" aria-label="Send" data-panel="send">
+
+      <!-- Queue: progress and controls -->
+      <section class="card queue-card" aria-labelledby="runTitle">
+        <div class="card-head">
+          <h2 id="runTitle">Queue</h2>
+          <span class="state-tag" id="runStateTag" data-tone="neutral">Empty</span>
+        </div>
+
+        <div class="empty-state" id="emptyState">
+          <svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg>
+          <div>
+            <p><strong>No contacts loaded.</strong> Nothing sends until you review the list and press Start.</p>
+            <ol class="getting-started">
+              <li>Open Google Voice in a tab (the button at the top shows <em>Connected</em>).</li>
+              <li>Below, link your Google Sheet, upload a CSV or paste rows.</li>
+              <li>Write the message, click <strong>Validate &amp; preview</strong>, then <strong>Start queue</strong>.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="run-body" id="runBody" hidden>
+          <p class="run-status" id="runStatus" role="status" aria-live="polite"></p>
+
+          <div class="progress-row">
+            <div class="bar" role="progressbar" id="progressBar" aria-label="Queue progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span class="bar-fill" id="progressFill"></span>
+            </div>
+            <span class="bar-label" id="progressLabel">0%</span>
+          </div>
+
+          <dl class="stats">
+            <div class="stat"><dt>Total</dt><dd id="statTotal">0</dd></div>
+            <div class="stat" data-tone="success"><dt>Sent</dt><dd id="statSent">0</dd></div>
+            <div class="stat" data-tone="danger"><dt>Failed</dt><dd id="statFailed">0</dd></div>
+            <div class="stat"><dt>Left</dt><dd id="statRemaining">0</dd></div>
+          </dl>
+
+          <div class="current" id="currentBox" hidden>
+            <span class="pulse" aria-hidden="true"></span>
+            <span class="current-value" id="currentText"></span>
+          </div>
+          <p class="daily-line" id="etaLine" hidden></p>
+          <p class="daily-line" id="dailyLine" hidden></p>
+
+          <div class="controls" role="group" aria-label="Queue controls">
+            <button type="button" class="btn btn-primary" id="btnStart"><svg class="icon icon-solid"><use href="#i-play"/></svg><span>Start queue</span></button>
+            <button type="button" class="btn btn-primary" id="btnResume"><svg class="icon icon-solid"><use href="#i-play"/></svg><span>Resume</span></button>
+            <button type="button" class="btn" id="btnPause"><svg class="icon icon-solid"><use href="#i-pause"/></svg><span>Pause</span></button>
+            <button type="button" class="btn" id="btnStop"><svg class="icon icon-solid"><use href="#i-stop"/></svg><span>Stop</span></button>
+          </div>
+
+          <div class="card-foot">
+            <button type="button" class="btn-ghost" id="btnRetryFailed"><svg class="icon"><use href="#i-retry"/></svg>Retry failed</button>
+            <button type="button" class="btn-ghost btn-ghost-danger" id="btnClear"><svg class="icon"><use href="#i-trash"/></svg>Clear queue</button>
+          </div>
+          <p class="footnote">&ldquo;Sent&rdquo; means Google Voice accepted the message. Carrier delivery can&rsquo;t be confirmed.</p>
+        </div>
+
+        <p class="run-alert" id="runAlert" role="alert" hidden></p>
+      </section>
+
+      <!-- Import -->
+      <details class="card" id="importCard" open>
+        <summary>
+          <h2>Import contacts</h2>
+          <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </summary>
+        <div class="card-body">
+
+          <div class="step">
+            <p class="step-head"><span class="step-num">1</span>Contacts</p>
+            <div class="segmented" role="radiogroup" aria-label="How to add contacts">
+              <label><input type="radio" name="source" value="sheet"><span>Google Sheet</span></label>
+              <label><input type="radio" name="source" value="file" checked><span>CSV file</span></label>
+              <label><input type="radio" name="source" value="paste"><span>Paste</span></label>
+            </div>
+
+            <div class="source-pane" id="sheetPane" hidden>
+              <div id="sheetConnect">
+                <label for="sheetUrl" class="visually-hidden">Google Sheet link</label>
+                <div class="inline-field">
+                  <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off" spellcheck="false" aria-describedby="sheetHint">
+                  <button type="button" class="btn" id="btnSheetLoad">Load</button>
+                </div>
+                <p class="field-hint" id="sheetHint">Paste the link from the sheet&rsquo;s address bar. It&rsquo;s read with your Google sign-in, so the sheet can stay private.</p>
+              </div>
+              <div class="file-card" id="sheetCard" hidden>
+                <span class="file-icon" aria-hidden="true"><svg class="icon"><use href="#i-sheet"/></svg></span>
+                <div class="file-info">
+                  <p class="file-name" id="sheetName"></p>
+                  <p class="file-meta" id="sheetMeta" aria-live="polite"></p>
+                </div>
+                <button type="button" class="icon-btn" id="btnSheetReload" aria-label="Reload the sheet" title="Reload the latest rows"><svg class="icon"><use href="#i-retry"/></svg></button>
+                <button type="button" class="icon-btn" id="btnSheetRemove" aria-label="Disconnect sheet"><svg class="icon"><use href="#i-x"/></svg></button>
+              </div>
+            </div>
+
+            <div class="source-pane" id="uploadPane" hidden>
+              <label class="dropzone" id="dropzone">
+                <input type="file" id="fileInput" class="visually-hidden" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+                <svg class="icon dz-icon" aria-hidden="true"><use href="#i-upload"/></svg>
+                <span class="dz-title">Drop a CSV here or <span class="dz-link">browse</span></span>
+                <span class="dz-hint">CSV, TSV or TXT, up to 2 MB</span>
+              </label>
+              <div class="file-card" id="fileCard" hidden>
+                <span class="file-icon" aria-hidden="true"><svg class="icon"><use href="#i-file"/></svg></span>
+                <div class="file-info">
+                  <p class="file-name" id="fileName"></p>
+                  <p class="file-meta" id="fileMeta"></p>
+                </div>
+                <button type="button" class="btn btn-sm" id="btnFileReplace">Replace</button>
+                <button type="button" class="icon-btn" id="btnFileRemove" aria-label="Remove file"><svg class="icon"><use href="#i-x"/></svg></button>
+              </div>
+              <p class="field-hint">Excel or Google Sheets? Export as CSV first (<strong>File &rsaquo; Download &rsaquo; CSV</strong>).</p>
+            </div>
+
+            <div class="source-pane" id="pastePane" hidden>
+              <label for="importText" class="visually-hidden">Paste spreadsheet rows</label>
+              <textarea id="importText" rows="6" spellcheck="false" autocomplete="off" aria-describedby="importHint importError"></textarea>
+              <p class="field-hint" id="importHint"></p>
+            </div>
+          </div>
+
+          <div class="step">
+            <p class="step-head" id="modeLabel"><span class="step-num">2</span>Message</p>
+            <div class="segmented" role="radiogroup" aria-labelledby="modeLabel">
+              <label><input type="radio" name="messageMode" value="column" checked><span>From a column</span></label>
+              <label><input type="radio" name="messageMode" value="template"><span>Same for everyone</span></label>
+            </div>
+
+            <div class="field" id="templateField" hidden>
+              <label for="templateText" class="visually-hidden">Message to send</label>
+              <textarea id="templateText" class="template-input" rows="4" maxlength="5000" aria-describedby="templateCount variableHint importError" placeholder="Hi {{First Name|there}}, your appointment is confirmed for {{Date}}. Reply STOP to opt out."></textarea>
+              <p class="template-count" id="templateCount" aria-live="polite">0 characters</p>
+            </div>
+
+            <div class="variables" id="variableBox">
+              <div class="sub-head">
+                <span class="mini-label" id="variablesLabel">Variables</span>
+                <span class="muted" id="variableStatus"></span>
+              </div>
+              <div class="chip-row" id="variableChips" role="group" aria-labelledby="variablesLabel"></div>
+              <p class="field-hint" id="variableHint"></p>
+            </div>
+          </div>
+
+          <div class="step">
+            <p class="step-head"><span class="step-num">3</span>Review</p>
+            <div class="preview" id="previewBox" hidden>
+              <div class="sub-head">
+                <span class="mini-label" id="previewLabel">Preview</span>
+                <span class="muted" id="previewMeta"></span>
+              </div>
+              <p class="preview-text" id="previewText"></p>
+            </div>
+            <p class="preview-empty" id="previewEmpty">Add contacts to preview the first message.</p>
+
+            <p class="field-error" id="importError" role="alert" hidden></p>
+
+            <div class="row-actions">
+              <button type="button" class="btn btn-primary btn-grow" id="btnImport"><svg class="icon"><use href="#i-check"/></svg><span>Validate &amp; preview</span></button>
+              <button type="button" class="btn" id="btnImportClear">Clear</button>
+            </div>
+
+            <details class="example">
+              <summary>Format examples</summary>
+              <p class="example-title">Message in the sheet, with a variable</p>
+              <pre class="example-code">Phone,First Name,Message
++12125550147,Sam,"Hi {{First Name}}, your order is ready."
+(646) 555-0123,Alex,Your appointment is at 3 pm.</pre>
+              <p class="example-title">Same message for everyone</p>
+              <pre class="example-code">Phone,First Name
++12125550147,Sam
+(646) 555-0123,</pre>
+              <p class="field-hint">With <code>Hi {{First Name|there}}</code>, Alex (blank name) gets &ldquo;Hi there&rdquo;.</p>
+              <ul class="tips">
+                <li>Variables ignore case and spaces: <code>{{first_name}}</code> works too.</li>
+                <li>A &ldquo;Name&rdquo; column also gives <code>{{First Name}}</code> and <code>{{Last Name}}</code>.</li>
+                <li>Quote CSV values that contain commas.</li>
+                <li>Numbers without a country code are treated as US/Canada.</li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </details>
+
+      <!-- Contacts -->
+      <section class="card" aria-labelledby="contactsTitle" id="contactsCard" hidden>
+        <div class="card-head">
+          <h2 id="contactsTitle">Contacts</h2>
+          <span class="muted head-grow" id="contactsSummary"></span>
+          <button type="button" class="icon-btn" id="btnExport" aria-label="Download results as CSV" title="Download results (CSV) to update your sheet"><svg class="icon"><use href="#i-download"/></svg></button>
+        </div>
+
+        <div class="dup-control" id="historyControl" data-tone="neutral" hidden>
+          <span class="dup-label" id="historyLabel"></span>
+          <div class="segmented segmented-sm" role="radiogroup" aria-labelledby="historyLabel">
+            <label><input type="radio" name="historyPolicy" value="skip" checked><span>Skip</span></label>
+            <label><input type="radio" name="historyPolicy" value="send"><span>Send again</span></label>
+          </div>
+        </div>
+
+        <div class="dup-control" id="dupControl" hidden>
+          <span class="dup-label" id="dupLabel"></span>
+          <div class="segmented segmented-sm" role="radiogroup" aria-labelledby="dupLabel">
+            <label><input type="radio" name="dupPolicy" value="skip" checked><span>Skip</span></label>
+            <label><input type="radio" name="dupPolicy" value="keep"><span>Keep</span></label>
+          </div>
+        </div>
+
+        <div class="search">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <input type="search" id="contactSearch" placeholder="Search number, row or message" aria-label="Search contacts" autocomplete="off">
+        </div>
+        <div class="filters" role="group" aria-label="Filter contacts" id="filterBar">
+          <button type="button" class="filter" data-filter="all" aria-pressed="true">All <span class="count" data-count="all"></span></button>
+          <button type="button" class="filter" data-filter="pending" aria-pressed="false">Pending <span class="count" data-count="pending"></span></button>
+          <button type="button" class="filter" data-filter="sent" aria-pressed="false">Sent <span class="count" data-count="sent"></span></button>
+          <button type="button" class="filter" data-filter="issues" aria-pressed="false">Issues <span class="count" data-count="issues"></span></button>
+          <button type="button" class="filter" data-filter="skipped" aria-pressed="false">Skipped <span class="count" data-count="skipped"></span></button>
+        </div>
+
+        <ol class="contact-list" id="contactList" aria-label="Contacts"></ol>
+        <button type="button" class="btn btn-sm show-more" id="btnShowMore" hidden>Show more</button>
+        <p class="empty-note" id="contactEmpty" hidden>No contacts match.</p>
+      </section>
+
+      <footer class="notice">
+        <svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>
+        <p>Only text people who have agreed to hear from you. You&rsquo;re responsible for Google&rsquo;s terms and messaging laws such as the TCPA.</p>
+      </footer>
+    </div>
+
+    <!-- ============================================================= Settings -->
+    <div class="tab-panel" id="panelSettings" role="tabpanel" aria-label="Settings" data-panel="settings" hidden>
+      <section class="card" id="settingsCard" aria-labelledby="settingsTitle">
+        <div class="card-head">
+          <h2 id="settingsTitle">Sending</h2>
+        </div>
+        <form id="settingsForm" novalidate>
+          <p class="group-label">Pacing</p>
+          <div class="setting">
+            <label for="delayInput">Delay between messages</label>
+            <div class="input-group">
+              <input type="number" id="delayInput" name="delaySec" min="45" max="3600" step="1" inputmode="numeric" aria-describedby="delayHint delayError" required>
+              <span aria-hidden="true">sec</span>
+            </div>
+            <p class="field-hint" id="delayHint">45 to 3,600 seconds. Default 60.</p>
+            <p class="field-error" id="delayError" hidden></p>
+          </div>
+          <div class="setting">
+            <label for="jitterInput">Random extra delay</label>
+            <div class="input-group">
+              <input type="number" id="jitterInput" name="jitterSec" min="0" max="3600" step="1" inputmode="numeric" aria-describedby="jitterHint jitterError" required>
+              <span aria-hidden="true">sec</span>
+            </div>
+            <p class="field-hint" id="jitterHint">Up to this much is added at random. 0 turns it off.</p>
+            <p class="field-error" id="jitterError" hidden></p>
+          </div>
+          <div class="setting">
+            <label for="dailyInput">Daily limit</label>
+            <div class="input-group">
+              <input type="number" id="dailyInput" name="dailyLimit" min="0" max="1000" step="1" inputmode="numeric" aria-describedby="dailyHint dailyError" required>
+              <span aria-hidden="true">/day</span>
+            </div>
+            <p class="field-hint" id="dailyHint">0 means no limit. Once reached, the queue resumes after midnight. <span class="daily-used" id="dailyUsed"></span></p>
+            <p class="field-error" id="dailyError" hidden></p>
+          </div>
+          <div class="setting setting-hours">
+            <label class="check-label" for="windowOnInput"><input type="checkbox" id="windowOnInput" name="windowOn" aria-describedby="windowHint">Only send between</label>
+            <div class="time-range">
+              <label for="windowStartInput" class="visually-hidden">Start sending at</label>
+              <input type="time" id="windowStartInput" name="windowStart" step="900" aria-describedby="windowHint windowError">
+              <span aria-hidden="true">and</span>
+              <label for="windowEndInput" class="visually-hidden">Stop sending at</label>
+              <input type="time" id="windowEndInput" name="windowEnd" step="900" aria-describedby="windowHint windowError">
+            </div>
+            <p class="field-hint" id="windowHint">Your computer&rsquo;s time. Outside these hours the queue waits and continues by itself. The TCPA quiet hours are 9 PM to 8 AM in the recipient&rsquo;s time zone.</p>
+            <p class="field-error" id="windowError" hidden></p>
+          </div>
+
+          <p class="group-label">Safety</p>
+          <div class="setting">
+            <label for="failInput">Stop after failures in a row</label>
+            <div class="input-group">
+              <input type="number" id="failInput" name="maxConsecutiveFailures" min="1" max="10" step="1" inputmode="numeric" aria-describedby="failHint failError" required>
+            </div>
+            <p class="field-hint" id="failHint">1 to 10. Unconfirmed sends count as failures.</p>
+            <p class="field-error" id="failError" hidden></p>
+          </div>
+
+          <p class="group-label">Alerts</p>
+          <div class="setting">
+            <label class="check-label" for="notifyInput"><input type="checkbox" id="notifyInput" name="notify" aria-describedby="notifyHint">Desktop notifications</label>
+            <p class="field-hint" id="notifyHint">A notification when a queue finishes or stops on a problem, so you don&rsquo;t have to watch the panel.</p>
+          </div>
+
+          <div class="row-actions">
+            <button type="submit" class="btn btn-primary" id="btnSaveSettings">Save settings</button>
+            <span class="save-note" id="settingsSaved" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+        <p class="callout"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span>Delays lower the risk but can&rsquo;t guarantee you stay within Google Voice&rsquo;s limits. Google sets those and can change them.</span></p>
+      </section>
+
+      <section class="card" id="historyCard" aria-labelledby="historyTitle">
+        <div class="card-head">
+          <h2 id="historyTitle">Sent history</h2>
+          <span class="muted" id="historyCount"></span>
+        </div>
+        <p class="field-hint">Every number you text is remembered, so re-importing a sheet only texts the new rows. Kept in this browser as one-way fingerprints, not readable numbers.</p>
+        <details class="example" id="historyAddBox">
+          <summary>Add numbers you texted before</summary>
+          <label for="historyText" class="visually-hidden">Numbers you texted before</label>
+          <textarea id="historyText" class="history-input" rows="4" spellcheck="false" autocomplete="off" placeholder="One number per line, or paste a column from your sheet"></textarea>
+          <div class="row-actions">
+            <button type="button" class="btn btn-sm" id="btnHistoryAdd">Add to history</button>
+            <span class="save-note" id="historyNote" role="status" aria-live="polite"></span>
+          </div>
+        </details>
+        <div class="card-foot">
+          <span></span>
+          <button type="button" class="btn-ghost btn-ghost-danger" id="btnHistoryClear"><svg class="icon"><use href="#i-trash"/></svg>Clear history</button>
+        </div>
+      </section>
+
+      <section class="card" id="optOutCard" aria-labelledby="optOutTitle">
+        <div class="card-head">
+          <h2 id="optOutTitle">Do-not-text list</h2>
+          <span class="muted" id="optOutCount"></span>
+        </div>
+        <p class="field-hint">People who replied STOP or asked not to be texted. These numbers are never texted, not even with &ldquo;Send again&rdquo;, and are kept when you clear the sent history.</p>
+        <details class="example" id="optOutBox">
+          <summary>Add or remove numbers</summary>
+          <label for="optOutText" class="visually-hidden">Numbers that must never be texted</label>
+          <textarea id="optOutText" class="history-input" rows="3" spellcheck="false" autocomplete="off" placeholder="One number per line, or paste a column"></textarea>
+          <div class="row-actions">
+            <button type="button" class="btn btn-sm" id="btnOptOutAdd">Never text these</button>
+            <button type="button" class="btn btn-sm" id="btnOptOutRemove">Remove from list</button>
+            <span class="save-note" id="optOutNote" role="status" aria-live="polite"></span>
+          </div>
+        </details>
+      </section>
+
+      <section class="card" aria-labelledby="diagTitle">
+        <div class="diag">
+          <div>
+            <h2 id="diagTitle">Page check</h2>
+            <p class="field-hint">Looks for Google Voice&rsquo;s controls. Nothing is clicked or sent.</p>
+          </div>
+          <button type="button" class="btn btn-sm" id="btnDiagnose"><svg class="icon"><use href="#i-scan"/></svg><span>Check page</span></button>
+        </div>
+        <ul class="diag-result" id="diagResult" aria-live="polite" hidden></ul>
+      </section>
+    </div>
+
+    <!-- ============================================================= Activity -->
+    <div class="tab-panel" id="panelActivity" role="tabpanel" aria-label="Activity" data-panel="activity" hidden>
+      <section class="card" id="logCard" aria-labelledby="logTitle">
+        <div class="card-head">
+          <h2 id="logTitle">Activity</h2>
+          <button type="button" class="btn-ghost" id="btnClearLog">Clear</button>
+        </div>
+        <ol class="log" id="logList" aria-label="Activity log, newest first"></ol>
+        <p class="empty-note" id="logEmpty">No activity yet.</p>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+    <form method="dialog">
+      <h2 id="confirmTitle"></h2>
+      <p id="confirmBody"></p>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" class="btn" id="confirmCancel">Cancel</button>
+        <button type="submit" value="alt" class="btn" id="confirmAlt" hidden>Other</button>
+        <button type="submit" value="confirm" class="btn btn-primary" id="confirmOk">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

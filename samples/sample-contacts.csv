@@ -1,0 +1,14 @@
+Phone,First Name,Last Name,City,Appointment,Message
+(212) 555-0101,Olivia,Martinez,New York,Mon 9:00 am,"Hi {{First Name}}, your appointment is confirmed for {{Appointment}}. Reply STOP to opt out."
+646-555-0102,Liam,Johnson,Brooklyn,Mon 10:30 am,"Hi {{First Name}}, see you {{Appointment}}!"
++1 415 555 0103,Ava,Nguyen,San Francisco,Tue 11:00 am,"Hello {{First Name}}, quick reminder about {{Appointment}} in {{City}}."
+312.555.0104,Noah,Williams,Chicago,Tue 2:15 pm,"Hi {{First Name}}, your order is ready for pickup."
+(305) 555-0105,,Brown,Miami,Wed 9:45 am,"Hi {{First Name|there}}, thanks for signing up, we'll be in touch soon."
+713-555-0106,Sophia,Garcia,Houston,Wed 1:00 pm,"Hi {{First Name}}, reply YES to confirm {{Appointment}}."
+(206) 555-0107,Mason,Lee,Seattle,Thu 3:30 pm,"Hi {{First Name}}, your appointment is confirmed for {{Appointment}}. Reply STOP to opt out."
+617 555 0108,Isabella,Davis,Boston,Thu 4:00 pm,"Hi {{First Name}}, we've moved you to {{Appointment}}. See you then!"
+(480) 555-0109,Ethan,Wilson,Phoenix,Fri 10:00 am,"Good morning {{First Name}}, a reminder: {{Appointment}}."
+212-555-0101,Olivia,Martinez,New York,Mon 9:00 am,This row repeats Olivia's number to show duplicate detection.
+555-0110,Mia,Anderson,Denver,Fri 12:30 pm,This number is missing its area code to show a validation error.
+(702) 555-0111,Lucas,Thomas,Las Vegas,Fri 3:00 pm,
+(503) 555-0112,Harper,Taylor,Portland,Sat 11:30 am,"Hi {{First Name}}, your appointment is confirmed for {{Appointment}}. Reply STOP to opt out."
