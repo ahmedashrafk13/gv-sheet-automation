@@ -204,6 +204,7 @@ How it works:
 | `alarms` | The delay between messages and the watchdog, which must survive the service worker stopping. |
 | Host: `https://generativelanguage.googleapis.com/*`, `https://api.groq.com/*`, `https://openrouter.ai/*` | Only for the optional AI message versions, and only for the service you choose. Nothing is sent to them unless the option is on and has a key. |
 | `notifications` | The desktop notification when a queue finishes or stops on a problem (can be turned off in Settings). |
+| `debugger` | Only while a message is being prepared and sent: makes the Google Voice tab behave as if it has keyboard focus (`Emulation.setFocusEmulationEnabled`), because Google Voice shows its "Send to …" suggestion only to a focused page and clicking Start leaves focus in the side panel. Chrome shows a "started debugging this browser" bar meanwhile. Nothing else is read or sent through it. |
 | `scripting` | Injects the content script into a Google Voice tab that was open before the extension was installed or reloaded. |
 | Host: `https://voice.google.com/*` | The only site the extension interacts with. |
 | Host: `https://docs.google.com/*`, `https://*.googleusercontent.com/*` | Downloads a linked Google Sheet as CSV. Google's export link redirects to a signed `googleusercontent.com` download. Nothing is sent to these hosts and no page there is read or changed. |

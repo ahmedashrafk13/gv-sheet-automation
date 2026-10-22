@@ -102,6 +102,14 @@
   const fullText = (el) =>
     [el.getAttribute('aria-label'), el.getAttribute('title'), el.textContent].filter(Boolean).join(' ');
 
+  /**
+   * fullText plus the labels of everything inside. A saved contact's chip
+   * shows only the name; its remove button is labelled
+   * "Remove Daniel Ryan Google Voice • 2 0 1 4 5 5 7 8 1 9?".
+   */
+  const deepText = (el) =>
+    [fullText(el), ...[...el.querySelectorAll('[aria-label], [title]')].map((n) => n.getAttribute('aria-label') || n.getAttribute('title'))].join(' ');
+
   function queryTarget(target, { root = document, visibleOnly = true } = {}) {
     const found = [];
     const seen = new Set();
@@ -219,6 +227,14 @@
       }
     }
     return normalizeText(readValue(el)) === normalizeText(value);
+  }
+
+  /** One key event for a printable character. Returns false if the page cancelled it. */
+  function charKey(el, type, ch) {
+    const keyCode = /\d/.test(ch) ? 48 + Number(ch) : ch.toUpperCase().charCodeAt(0);
+    const code = /\d/.test(ch) ? `Digit${ch}` : /[a-z]/i.test(ch) ? `Key${ch.toUpperCase()}` : '';
+    const init = { key: ch, code, keyCode, which: keyCode, charCode: type === 'keypress' ? ch.charCodeAt(0) : 0, bubbles: true, cancelable: true };
+    return el.dispatchEvent(new KeyboardEvent(type, init));
   }
 
   function pressKey(el, key) {
@@ -403,6 +419,11 @@
         i += chunkLen;
         typedSoFar += chunk;
 
+        // Google Voice opens its "Send to …" suggestion on key events, not on
+        // input alone, so each digit gets keydown/keypress before and keyup after.
+        for (const ch of chunk) {
+          if (charKey(el, 'keydown', ch)) charKey(el, 'keypress', ch);
+        }
         let ok = false;
         try {
           ok = document.execCommand('insertText', false, chunk);
@@ -417,6 +438,7 @@
             setNativeValue(el, typedSoFar);
           }
         }
+        for (const ch of chunk) charKey(el, 'keyup', ch);
         // Micro pause between digits, slightly longer after 3rd and 6th digit
         const isGroupBreak = i === 3 || i === 6 || (clean.startsWith('+1') && (i === 2 || i === 5 || i === 8));
         await sleep(isGroupBreak ? randInt(100, 200) : randInt(35, 75));
@@ -694,12 +716,40 @@
     );
     if (!input) throw new GvError('RECIPIENT_FIELD_NOT_FOUND', null, { retryable: true });
 
-    // A fresh composer has no recipients. A leftover one could turn this into a group message.
+    // A fresh composer has no recipients. A leftover one (Google Voice keeps
+    // drafts) could turn this into a group message, so remove it first.
+    for (const chip of queryTarget(S.recipientChip)) {
+      const remove = first(S.recipientChipRemove, { root: chip });
+      if (remove) await naturalClick(remove, { ctx });
+    }
     const clean = await waitFor(() => queryTarget(S.recipientChip).length === 0, { timeout: 1500, ctx });
     if (!clean) throw new GvError('RECIPIENT_MISMATCH', 'A recipient was already selected in the composer.', { retryable: true });
     ctx.recipientInput = input;
     await readingPause('inspect_composer', ctx);
     return input;
+  }
+
+  /**
+   * The "Send to (201) 455-7819" entry, found by its visible text wherever
+   * Google Voice renders it. Its icon is a font ligature, so the entry's text
+   * starts with the icon's name and selector patterns like /^send to/ miss it.
+   * Only an entry saying "Send to" with exactly this number qualifies.
+   */
+  function findSendToEntry(job) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (/send to/i.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      let el = node.parentElement;
+      for (let depth = 0; el && depth < 6; depth++, el = el.parentElement) {
+        if (!phoneSequences(el.textContent).some((d) => digitsMatch(d, job))) continue;
+        const target =
+          el.closest('[role="option"], [role="menuitem"], [role="button"], button, a, li, [tabindex]') || el;
+        if (isVisible(target) && !target.closest('gv-conversation-list, [aria-label="Conversations" i]')) return target;
+        break;
+      }
+    }
+    return null;
   }
 
   async function enterRecipient(ctx, input, job) {
@@ -709,11 +759,24 @@
     if (!typed && !replaceFieldText(input, job.dial)) {
       throw new GvError('RECIPIENT_FIELD_NOT_FOUND', 'The recipient field did not accept the number.', { retryable: true });
     }
-    const option = await waitFor(
-      () =>
-        queryTarget(S.recipientOption).find((el) => phoneSequences(fullText(el)).some((d) => digitsMatch(d, job))) || null,
-      { timeout: TIMEOUTS.option, ctx },
-    );
+    const findOption = () =>
+      queryTarget(S.recipientOption).find((el) => phoneSequences(fullText(el)).some((d) => digitsMatch(d, job))) ||
+      findSendToEntry(job);
+    let option = await waitFor(findOption, { timeout: 2500, ctx });
+
+    // The "Send to …" popup only opens on input while the page has keyboard
+    // focus, which stays in the side panel after Start is clicked. The popup
+    // also opens when its field receives focus, so send that instead. The
+    // first focus can be swallowed (Material skips reopening after a window
+    // blur), hence a second one.
+    for (let attempt = 0; !option && attempt < 2; attempt++) {
+      checkpoint(ctx);
+      input.dispatchEvent(new FocusEvent('focus'));
+      input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      option = await waitFor(findOption, { timeout: attempt ? TIMEOUTS.option : 1500, ctx });
+    }
+    ctx.probe = `page focused: ${document.hasFocus() ? 'yes' : 'no'}; field focused: ${document.activeElement === input ? 'yes' : 'no'}; popup shown: ${option ? 'yes' : 'no'}`;
+
     if (option) {
       await readingPause('read_recipient', ctx);
       checkpoint(ctx);
@@ -721,6 +784,8 @@
       ctx.pickedMatchingOption = true;
     } else {
       // No suggestion showed this number; let Google Voice resolve what was typed.
+      // Keep what the page looked like so Check page can show it.
+      lastFailure = { jobId: ctx.jobId, at: new Date().toLocaleTimeString(), step: 'no matching suggestion', outline: composerOutline() };
       await sleep(randInt(80, 160));
       pressKey(input, 'Enter');
       ctx.pickedMatchingOption = false;
@@ -735,7 +800,7 @@
         const chips = queryTarget(S.recipientChip);
         if (chips.length > 1) return { error: 'RECIPIENT_MISMATCH', detail: `${chips.length} recipients are selected.` };
         if (chips.length === 1) {
-          const numbers = phoneSequences(fullText(chips[0]));
+          const numbers = phoneSequences(deepText(chips[0]));
           if (numbers.some((d) => digitsMatch(d, job))) return { ok: true };
           if (numbers.length) return { error: 'RECIPIENT_MISMATCH', detail: 'The selected recipient has a different number.' };
           // Saved contacts show a name rather than the number. Accept only if
@@ -749,7 +814,21 @@
       },
       { timeout: TIMEOUTS.recipientConfirm, ctx },
     );
-    if (!verdict) throw new GvError('RECIPIENT_NOT_CONFIRMED', null, { retryable: true });
+    if (!verdict) {
+      if (lastFailure?.jobId !== ctx.jobId) {
+        lastFailure = { jobId: ctx.jobId, at: new Date().toLocaleTimeString(), step: 'recipient not confirmed', outline: composerOutline() };
+      }
+      const count = queryTarget(S.recipientCount, { visibleOnly: false })
+        .map((el) => el.textContent.trim())
+        .find((t) => /recipient/i.test(t));
+      const seen = [
+        ctx.probe,
+        `suggestion clicked: ${ctx.pickedMatchingOption ? 'yes' : 'no'}`,
+        `selected recipients found: ${queryTarget(S.recipientChip).length}`,
+        count ? `Google Voice says "${count.slice(0, 40)}"` : null,
+      ];
+      throw new GvError('RECIPIENT_NOT_CONFIRMED', seen.filter(Boolean).join('; '), { retryable: true });
+    }
     if (verdict.error) {
       throw new GvError(verdict.error, verdict.detail, { retryable: verdict.error === 'RECIPIENT_MISMATCH' });
     }
@@ -1081,6 +1160,43 @@
     return null;
   }
 
+  // Page outline captured when a recipient couldn't be selected (see Check page).
+  let lastFailure = null;
+
+  // Outline of the elements around the composer (tags, ids, roles, labels and
+  // short text) so selectors can be fixed from what Google Voice really shows.
+  function composerOutline() {
+    const anchor = first(S.recipientInput) || first(S.messageInput) || document.querySelector('textarea');
+    if (!anchor) return null;
+    let root = anchor;
+    for (let i = 0; i < 8 && root.parentElement && root.parentElement !== document.body; i++) root = root.parentElement;
+    const keep = ['id', 'gv-test-id', 'gv-id', 'role', 'aria-label', 'placeholder', 'class'];
+    const lines = [];
+    const walk = (el, depth) => {
+      if (lines.length >= 500 || depth > 30 || /^(script|style|svg)$/i.test(el.tagName)) return;
+      const attrs = keep
+        .filter((a) => el.getAttribute(a))
+        .map((a) => `${a}="${el.getAttribute(a).slice(0, 60)}"`)
+        .join(' ');
+      const text = [...el.childNodes]
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent.trim())
+        .join(' ')
+        .slice(0, 80);
+      const value = el.value ? ` value="${String(el.value).slice(0, 40)}"` : '';
+      lines.push(`${'  '.repeat(depth)}<${el.tagName.toLowerCase()}${attrs ? ` ${attrs}` : ''}${value}>${text ? ` ${text}` : ''}`);
+      for (const child of el.children) walk(child, depth + 1);
+    };
+    walk(root, 0);
+    // Suggestion lists open in an overlay outside the composer.
+    const overlay = document.querySelector('.cdk-overlay-container');
+    if (overlay?.children.length) {
+      lines.push('--- overlay');
+      walk(overlay, 0);
+    }
+    return `${location.pathname}${location.search}\nselectors ${S.version}\n${lines.join('\n')}`;
+  }
+
   function diagnose() {
     const checks = [];
     const add = (key, label, optional = false) => {
@@ -1092,6 +1208,7 @@
     add('messagesNavLink', 'Messages link');
     add('newMessageButton', 'New message button');
     add('recipientInput', 'recipient field (only while composing)', true);
+    add('recipientChip', 'selected recipient (only while composing)', true);
     add('messageInput', 'message box (only in a conversation)', true);
     add('sendButton', 'Send button (only in a conversation)', true);
     add('threadContainer', 'conversation message list', true);
@@ -1103,6 +1220,12 @@
       selectorsVersion: S.version,
       blockingDialogs: queryTarget(S.blockingDialog).length,
       checks,
+      outline: [
+        composerOutline(),
+        lastFailure?.outline && `\n=== at last failure (${lastFailure.at}, ${lastFailure.step})\n${lastFailure.outline}`,
+      ]
+        .filter(Boolean)
+        .join('\n') || null,
     };
   }
 

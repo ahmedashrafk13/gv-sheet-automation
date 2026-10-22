@@ -22,7 +22,7 @@
 
 (() => {
   const S = {
-    version: '2026-10-21',
+    version: '2026-10-22',
 
     // Present only when the signed-in app has rendered.
     appShell: {
@@ -73,6 +73,7 @@
       note: 'Input where a name or phone number is typed. VERIFY.',
       css: [
         'input[gv-test-id="recipient-picker-input"]',
+        'gv-message-party-picker input',
         'gv-recipient-picker input',
         'input[placeholder*="name or phone number" i]',
         'input[aria-label*="name or phone number" i]',
@@ -89,14 +90,24 @@
         '[role="option"]',
         'mat-option',
         '.mat-mdc-option',
+        // Live 2026-10-22: suggestions (e.g. "Daniel Ryan (201) 455-7819 • Google Voice")
+        // show as rows below the picker, not as role="option". Only rows that
+        // contain the typed number are ever clicked.
+        'gv-thread-details-pane-content [role="listitem"]',
+        'gv-thread-details-pane-content [role="button"]',
+        'gv-thread-details-pane-content button',
+        'gv-thread-details-pane-content li',
+        '.cdk-overlay-container [role="menuitem"]',
       ],
       text: { selector: 'button, [role="button"], li, div[tabindex]', patterns: [/^send to\b/i] },
     },
 
     // Selected recipients ("chips") in the recipient picker.
     recipientChip: {
-      note: 'Selected recipient chips. Used to make sure exactly one recipient is selected. VERIFY.',
+      note: 'Selected recipient chips. Used to make sure exactly one recipient is selected. Live 2026-10-22: mat-chip-grid inside gv-message-party-picker; a saved contact shows only its name.',
       css: [
+        'gv-message-party-picker mat-chip-row',
+        'gv-message-party-picker .mat-mdc-chip-row',
         '[gv-test-id="recipient-chip"]',
         'gv-recipient-picker mat-chip',
         'gv-recipient-picker .mat-mdc-chip',
@@ -105,9 +116,29 @@
       ],
     },
 
+    // Remove (x) button inside a chip; its label also holds the chip's number.
+    recipientChipRemove: {
+      note: 'Remove button of a selected recipient. Live 2026-10-22.',
+      css: ['[gv-test-id="chip-item-remove"]', '.mat-mdc-chip-remove'],
+      optional: true,
+    },
+
+    // Screen-reader status in the picker, e.g. "1 recipients added."
+    recipientCount: {
+      note: 'Visually hidden recipient count. Only reported in error details.',
+      css: ['gv-message-party-picker .cdk-visually-hidden'],
+      optional: true,
+    },
+
     recipientError: {
       note: 'Inline error when a number is rejected. Low confidence. VERIFY.',
-      css: ['gv-recipient-picker [role="alert"]', 'gv-recipient-picker .error', 'gv-recipient-picker mat-error'],
+      css: [
+        'gv-message-party-picker [role="alert"]',
+        'gv-message-party-picker mat-error',
+        'gv-recipient-picker [role="alert"]',
+        'gv-recipient-picker .error',
+        'gv-recipient-picker mat-error',
+      ],
       text: { selector: '[role="alert"], mat-error, .error', patterns: [/not a valid/i, /invalid (phone )?number/i, /can.t send to this number/i] },
     },
 

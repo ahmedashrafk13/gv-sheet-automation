@@ -1772,6 +1772,25 @@ async function runDiagnostics() {
     li.append(a, b);
     list.append(li);
   }
+  if (report.outline) {
+    const li = document.createElement('li');
+    const note = document.createElement('span');
+    note.textContent = 'Composer layout';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn-ghost';
+    copy.textContent = 'Copy page details';
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(report.outline);
+        copy.textContent = 'Copied';
+      } catch {
+        copy.textContent = 'Couldn’t copy';
+      }
+    });
+    li.append(note, copy);
+    list.append(li);
+  }
 }
 
 // ---------------------------------------------------------------------------

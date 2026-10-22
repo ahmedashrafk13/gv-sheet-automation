@@ -50,7 +50,7 @@ check(
   `host access limited to ${expectedHosts.join(', ')}`,
 );
 const perms = new Set(manifest.permissions ?? []);
-const expectedPerms = ['sidePanel', 'storage', 'alarms', 'scripting', 'notifications'];
+const expectedPerms = ['sidePanel', 'storage', 'alarms', 'scripting', 'notifications', 'debugger'];
 check(
   perms.size === expectedPerms.length && expectedPerms.every((p) => perms.has(p)),
   `permissions are exactly ${expectedPerms.join(', ')}`,

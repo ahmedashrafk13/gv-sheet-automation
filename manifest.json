@@ -10,7 +10,8 @@
     "storage",
     "alarms",
     "scripting",
-    "notifications"
+    "notifications",
+    "debugger"
   ],
   "host_permissions": [
     "https://voice.google.com/*",

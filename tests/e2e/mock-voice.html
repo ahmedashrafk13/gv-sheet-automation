@@ -11,6 +11,11 @@
     0197  number rejected in the picker      -> extension should not press Send
     other bubble settles after 800 ms        -> extension should report accepted
 
+  Like the live site (2026-10-22): suggestions open on key events, not on
+  input alone; a chip shows only a contact name, with the number in its
+  remove button's label; and a new message keeps the previous draft's
+  recipient until it is removed.
+
   window.__gv records every send, Send-button click and Enter keypress.
 -->
 <html lang="en">
@@ -19,14 +24,14 @@
   <title>Voice (mock)</title>
   <style>
     body { font: 14px system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-    gv-side-nav, gv-recipient-picker, gv-message-list, gv-text-message-item, gv-conversation-list { display: block; }
+    gv-side-nav, gv-message-party-picker, mat-chip-grid, mat-chip-row, gv-message-list, gv-text-message-item, gv-conversation-list { display: block; }
     gv-side-nav { width: 160px; border-right: 1px solid #ddd; padding: 12px; }
     gv-side-nav a { display: block; padding: 6px 0; }
     main { flex: 1; display: flex; }
     #list { width: 260px; border-right: 1px solid #ddd; padding: 12px; }
     #composer { flex: 1; display: flex; flex-direction: column; padding: 12px; }
     #composer[hidden] { display: none; }
-    .chip { display: inline-block; padding: 2px 8px; background: #e8eefc; border-radius: 12px; margin-right: 4px; }
+    mat-chip-row { display: inline-block; padding: 2px 8px; background: #e8eefc; border-radius: 12px; margin-right: 4px; }
     [role="option"] { padding: 6px; cursor: pointer; border: 1px solid #ccc; margin-top: 4px; }
     gv-message-list { flex: 1; overflow: auto; border: 1px solid #eee; margin: 8px 0; padding: 8px; }
     gv-text-message-item { margin: 4px 0; padding: 6px 8px; background: #f1f3f4; border-radius: 8px; white-space: pre-wrap; }
@@ -49,11 +54,15 @@
       <gv-conversation-list aria-label="Conversations"></gv-conversation-list>
     </section>
     <section id="composer" hidden>
-      <gv-recipient-picker>
-        <div class="chips"></div>
-        <input placeholder="Type a name or phone number" aria-label="To" autocomplete="off">
-        <div class="options" role="listbox"></div>
-      </gv-recipient-picker>
+      <!-- Live structure as of 2026-10-22: chips live in a mat-chip-grid. -->
+      <gv-message-party-picker>
+        <div role="region" aria-label="Select recipients">
+          <div class="cdk-visually-hidden" hidden>0 recipients added.</div>
+          <mat-chip-grid role="treegrid"><div role="presentation" class="chips"></div></mat-chip-grid>
+          <input placeholder="Type a name or phone number" aria-label="Type a name or phone number" autocomplete="off">
+          <div class="options" role="listbox"></div>
+        </div>
+      </gv-message-party-picker>
       <gv-message-list role="list" aria-label="Message list"></gv-message-list>
       <div class="entry">
         <textarea aria-label="Type a message" placeholder="Type a message" rows="3"></textarea>
@@ -67,7 +76,7 @@
     const $ = (s) => document.querySelector(s);
     const composer = $('#composer');
     const chips = $('.chips');
-    const input = $('gv-recipient-picker input');
+    const input = $('gv-message-party-picker input');
     const options = $('.options');
     const thread = $('gv-message-list');
     const textarea = $('textarea');
@@ -100,8 +109,6 @@
     $('#newMsg').addEventListener('click', () => {
       history.pushState({}, '', '/u/0/messages');
       composer.hidden = false;
-      recipient = null;
-      chips.replaceChildren();
       options.replaceChildren();
       input.value = '';
       textarea.value = '';
@@ -110,7 +117,7 @@
       input.focus();
     });
 
-    input.addEventListener('input', () => {
+    input.addEventListener('keyup', () => {
       clearTimeout(optionTimer);
       options.replaceChildren();
       const digits = input.value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
@@ -130,10 +137,21 @@
         opt.textContent = `Send to ${fmt(digits)}`;
         opt.addEventListener('click', () => {
           recipient = digits;
-          const chip = document.createElement('div');
-          chip.className = 'chip';
+          const chip = document.createElement('mat-chip-row');
+          chip.className = 'mat-mdc-chip mat-mdc-chip-row';
           chip.setAttribute('role', 'row');
-          chip.textContent = fmt(digits);
+          chip.textContent = 'Test Contact ';
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.setAttribute('gv-test-id', 'chip-item-remove');
+          remove.setAttribute('aria-label', `Remove Test Contact Google Voice • ${digits.split('').join(' ')}?`);
+          remove.textContent = '×';
+          remove.addEventListener('click', () => {
+            chips.replaceChildren();
+            recipient = null;
+            sendBtn.disabled = true;
+          });
+          chip.append(remove);
           chips.replaceChildren(chip);
           options.replaceChildren();
           input.value = '';

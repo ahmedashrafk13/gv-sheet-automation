@@ -410,6 +410,30 @@ async function ensureWatchdog() {
 }
 
 // ---------------------------------------------------------------------------
+// Page focus
+
+// Google Voice shows its "Send to …" suggestion only while its page has
+// keyboard focus, and clicking Start leaves focus in the side panel. While a
+// message is prepared and sent, the debugger makes the tab behave as focused;
+// Chrome shows a "started debugging this browser" bar meanwhile.
+async function emulateFocus(tabId) {
+  if (!chrome.debugger) return;
+  const target = { tabId };
+  try {
+    await chrome.debugger.attach(target, '1.3').catch((e) => {
+      if (!/already attached/i.test(e?.message ?? '')) throw e;
+    });
+    await chrome.debugger.sendCommand(target, 'Emulation.setFocusEmulationEnabled', { enabled: true });
+  } catch (e) {
+    log('warn', `Couldn’t keep the Google Voice tab focused (${e?.message ?? e}). Its “Send to” suggestion may not appear.`);
+  }
+}
+
+function releaseFocus(tabId) {
+  if (chrome.debugger && tabId != null) chrome.debugger.detach({ tabId }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
 // Queue engine
 
 function stopQueue(code) {
@@ -544,6 +568,7 @@ async function dispatchNext() {
   log('info', `${itemLabel(item)}: preparing message.`);
   await persist();
   await ensureWatchdog();
+  await emulateFocus(tab.id);
 
   const ack = await sendToTab(tab.id, {
     type: CONTENT.SEND,
@@ -566,6 +591,7 @@ async function finishJob({ outcome, code = null, detail = null, sendAttempted = 
   const f = state.inFlight;
   if (!f) return;
   state.inFlight = null;
+  releaseFocus(f.tabId);
   await chrome.alarms.clear(ALARM_WATCHDOG);
 
   const now = Date.now();
